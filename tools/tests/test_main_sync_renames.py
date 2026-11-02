@@ -41,17 +41,18 @@ class RenamedPathsTests(unittest.TestCase):
                 (root / original).write_text(text.replace("line 0\n", "changed\n"), encoding="utf-8")
             git("add", "-A")
             git("commit", "-qm", "fix(test): main change (#123)")
+            detected = setting == "true" or check_main_sync.git_version(root) < (2, 50)
             data = check_main_sync.report(root, "main", "feature")
             self.assertEqual(data["shared"], [original])
             self.assertEqual(set(data["pulls"]), {123})
-            self.assertEqual(data["conflicts"], [] if setting == "true" else [original])
-            if setting == "true":
+            self.assertEqual(data["conflicts"], [] if detected else [original])
+            if detected:
                 tree = git("merge-tree", "--write-tree", "main", "feature").splitlines()[0]
                 self.assertIn("changed", git("show", f"{tree}:{renamed}"))
             result = subprocess.run([sys.executable, str(Path(check_main_sync.__file__)), "--repo", str(root),
                                      "--base", "main", "--head", "feature"], capture_output=True, text=True, encoding="utf-8",
                                     env={**environment, "PYTHONIOENCODING": "utf-8"})
-            self.assertEqual(result.returncode, 0 if setting == "true" else 1, result.stderr)
+            self.assertEqual(result.returncode, 0 if detected else 1, result.stderr)
             self.assertIn(original, result.stdout)
             self.assertIn("#123", result.stdout)
 
